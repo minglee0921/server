@@ -99,6 +99,10 @@ class Database extends Backend implements IUserBackend {
 			// Clear cache
 			unset($this->cache[$uid]);
 
+			if ($result) {
+				unset($this->cache[$uid]); // invalidate non existing user in cache
+			}
+
 			return $result ? true : false;
 		}
 
@@ -224,8 +228,8 @@ class Database extends Backend implements IUserBackend {
 			if(\OC::$server->getHasher()->verify($password, $storedHash, $newHash)) {
 				if(!empty($newHash)) {
 					$this->setPassword($uid, $password);
+					unset($this->cache[$uid]); // invalidate cache
 				}
-				unset($this->cache[$uid]); // invalidate cache
 				return $row['uid'];
 			}
 
@@ -237,9 +241,10 @@ class Database extends Backend implements IUserBackend {
 	/**
 	 * Load an user in the cache
 	 * @param string $uid the username
-	 * @return boolean
+	 * @return boolean true if user was found, false otherwise
 	 */
 	private function loadUser($uid) {
+		// if not in cache (false is a valid value)
 		if (!isset($this->cache[$uid]) && $this->cache[$uid] !== false) {
 			//guests $uid could be NULL or ''
 			if ($uid === null || $uid === '') {
@@ -257,10 +262,15 @@ class Database extends Backend implements IUserBackend {
 
 			$this->cache[$uid] = false;
 
+			// "uid" is primary key, so there can only be a single result
 			if ($row = $result->fetchRow()) {
 				$this->cache[$uid]['uid'] = $row['uid'];
 				$this->cache[$uid]['displayname'] = $row['displayname'];
+			} else {
+				$result->closeCursor();
+				return false;
 			}
+			$result->closeCursor();
 		}
 
 		return true;
